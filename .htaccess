@@ -1,0 +1,13 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/syywrhsb/public/transcriber"
+PassengerBaseURI "/"
+PassengerAppType wsgi
+PassengerStartupFile passenger_wsgi.py
+PassengerPython "/home/syywrhsb/virtualenv/public/transcriber/3.11/bin/python"
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+SetEnv EMBEDDING_MODEL all-MiniLM-L6-v2
+SetEnv PORT 9876
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END
