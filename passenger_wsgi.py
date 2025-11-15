@@ -30,7 +30,7 @@ from utils.memory_tracker import get_memory_usage
 from utils.multipart_parser import parse_multipart_form_data
 
 # Initialize services globally (loaded once when app starts)
-print("🔄 Initializing services...")
+print("Initializing services...")
 embedding_service = EmbeddingService()
 embedding_service.initialize()
 
@@ -45,7 +45,7 @@ transcription_handler = TranscriptionHandler(
     parse_multipart_form_data,
     get_memory_usage
 )
-print("✅ Services initialized successfully!")
+print("Services initialized successfully!")
 
 
 class WSGIRequest:
@@ -137,7 +137,7 @@ def application(environ, start_response):
         return [request.response_body.getvalue()]
     
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
+        print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()
         status = '500 Internal Server Error'
@@ -169,8 +169,8 @@ def handle_health(request):
         }
         
         request.wfile.write(json.dumps(response).encode('utf-8'))
-        print("💚 Health check passed")
+        print("Health check passed")
         
     except Exception as e:
-        print(f"❌ Health check error: {str(e)}")
+        print(f"Health check error: {str(e)}")
         request.send_error(500, f"Error: {str(e)}")
