@@ -21,7 +21,7 @@ class TranscriptionService:
         try:
             from faster_whisper import WhisperModel
             self.model_type = "faster_whisper"
-            print("✅ Using faster-whisper for transcription")
+            print("[OK] Using faster-whisper for transcription")
             return
         except ImportError:
             pass
@@ -31,7 +31,7 @@ class TranscriptionService:
             from Transcriber.transcriber import transcribe as transcriber_transcribe
             self.transcriber_transcribe = transcriber_transcribe
             self.model_type = "transcriber"
-            print("✅ Using Transcriber package for transcription")
+            print("[OK] Using Transcriber package for transcription")
             return
         except ImportError:
             pass
@@ -41,13 +41,13 @@ class TranscriptionService:
             import whisper
             self.whisper_module = whisper
             self.model_type = "openai_whisper"
-            print("✅ Using openai-whisper for transcription")
+            print("[OK] Using openai-whisper for transcription")
             return
         except ImportError:
             pass
         
         self.model_type = None
-        print("⚠️  Warning: No transcription library available.")
+        print("[WARNING] No transcription library available.")
         print("   Note: Python 3.14 has compatibility issues with transcription libraries.")
         print("   Options:")
         print("   1. Use Python 3.11 or 3.12: python3.11 -m venv venv311")
@@ -57,14 +57,14 @@ class TranscriptionService:
     def load_model(self) -> None:
         """Load the transcription model (lazy initialization)"""
         if self.model_type == "faster_whisper" and self.whisper_model is None:
-            print("🔄 Loading faster-whisper model (this may take a minute on first run)...")
+            print("[INIT] Loading faster-whisper model (this may take a minute on first run)...")
             from faster_whisper import WhisperModel
             self.whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-            print("✅ faster-whisper model loaded successfully!")
+            print("[OK] faster-whisper model loaded successfully!")
         elif self.model_type == "openai_whisper" and self.whisper_model is None:
-            print("🔄 Loading Whisper model (this may take a minute on first run)...")
+            print("[INIT] Loading Whisper model (this may take a minute on first run)...")
             self.whisper_model = self.whisper_module.load_model("base")
-            print("✅ Whisper model loaded successfully!")
+            print("[OK] Whisper model loaded successfully!")
     
     def transcribe(self, audio_file_path: str, language: str = "en") -> str:
         """
@@ -126,4 +126,3 @@ class TranscriptionService:
     def is_available(self) -> bool:
         """Check if transcription service is available"""
         return self.model_type is not None
-

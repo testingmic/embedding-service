@@ -21,10 +21,10 @@ class EmbeddingService:
     def initialize(self) -> None:
         """Load the embedding model (lazy initialization)"""
         if self.model is None:
-            print(f"🔄 Loading embedding model '{self.model_name}' (this takes ~10 seconds on first run)...")
+            print(f"[INIT] Loading embedding model '{self.model_name}' (this takes ~10 seconds on first run)...")
             self.model = SentenceTransformer(self.model_name)
-            print("✅ Embedding model loaded successfully!")
-            print(f"📊 Embedding dimensions: {self.model.get_sentence_embedding_dimension()}")
+            print("[OK] Embedding model loaded successfully!")
+            print(f"[INFO] Embedding dimensions: {self.model.get_sentence_embedding_dimension()}")
     
     def encode_batch(self, texts: List[str], normalize: bool = True) -> List[List[float]]:
         """
@@ -79,4 +79,3 @@ class EmbeddingService:
             "loaded": True,
             "dimensions": self.model.get_sentence_embedding_dimension()
         }
-
