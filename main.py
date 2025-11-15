@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Transcription Service - Main Entry Point
-HTTP server that provides audio transcription
+Local Transcription Service - Main Entry Point
+HTTP server that provides audio transcription only
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -49,6 +49,7 @@ class APIHandler(BaseHTTPRequestHandler):
             
             response = {
                 'status': 'healthy',
+                'service': 'transcription',
                 'transcription_available': self.transcription_handler.transcription_service.is_available(),
                 'memory': {
                     'process_memory_mb': memory_stats['process_memory_mb'],
@@ -80,10 +81,14 @@ def run_server(port=9876):
     print("=" * 60)
     
     # Initialize services
-    print("\n[INIT] Initializing services...")
+    print("\n[INIT] Initializing transcription service...")
     transcription_service = TranscriptionService()
     if transcription_service.is_available():
         transcription_service.load_model()
+    else:
+        print("[ERROR] Transcription service not available!")
+        print("[ERROR] Please install: pip install faster-whisper")
+        return
     
     # Initialize handlers
     transcription_handler = TranscriptionHandler(

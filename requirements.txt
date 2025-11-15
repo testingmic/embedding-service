@@ -1,7 +1,10 @@
+# Transcription only - much lighter!
 psutil>=5.9.0
-openai-whisper>=20240930
 
-# Optional: For transcription (choose one based on Python version)
-# openai-whisper>=20240930  # For Python 3.11 or earlier
-# faster-whisper>=1.1.1      # Alternative, may have Python 3.14 issues
+# Choose ONE transcription library:
+faster-whisper>=1.0.0  # Recommended - lighter and faster
+# OR
+# openai-whisper>=20230314  # Alternative (heavier, needs full PyTorch)
 
+# Note: faster-whisper uses ONNX Runtime instead of full PyTorch
+# This saves ~300-400 MB of memory!

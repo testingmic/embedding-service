@@ -1,180 +1,190 @@
-#!/home/syywrhsb/virtualenv/public/transcriber/3.11/bin/python
+#!/usr/bin/env python3
 """
-WSGI adapter for cPanel/Passenger deployment
+Passenger WSGI adapter for the transcription service (transcription only)
 """
-import sys
 import os
+import sys
+import time
+from io import BytesIO
 
-# Increase timeouts
+# Set UTF-8 encoding
+os.environ['PYTHONIOENCODING'] = 'utf-8'
+os.environ['LANG'] = 'en_US.UTF-8'
+
+# Increase Passenger timeouts
 os.environ['PASSENGER_STARTUP_TIMEOUT'] = '300'
 os.environ['PASSENGER_MAX_REQUEST_TIME'] = '300'
 
-# Get the directory of this script
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# Add the application directory to the Python path
+sys.path.insert(0, os.path.dirname(__file__))
 
-# Add cPanel virtual environment to path
-VENV_SITE_PACKAGES = '/home/syywrhsb/virtualenv/public/transcriber/3.11/lib/python3.11/site-packages'
-if VENV_SITE_PACKAGES not in sys.path:
-    sys.path.insert(0, VENV_SITE_PACKAGES)
+# Log startup
+print("[STARTUP] Starting transcription service via Passenger", flush=True)
+start_time = time.time()
 
-# Add application directory
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+try:
+    from services.transcription_service import TranscriptionService
+    from handlers.transcription_handler import TranscriptionHandler
+    from utils.memory_tracker import get_memory_usage
+    from utils.multipart_parser import parse_multipart_form_data
+    
+    print("[STARTUP] Imports successful", flush=True)
+    
+    # Initialize transcription service only
+    print("[STARTUP] Initializing transcription service...", flush=True)
+    transcription_service = TranscriptionService()
+    if transcription_service.is_available():
+        transcription_service.load_model()
+    
+    # Initialize handler
+    transcription_handler = TranscriptionHandler(
+        transcription_service,
+        parse_multipart_form_data,
+        get_memory_usage
+    )
+    
+    elapsed = time.time() - start_time
+    print(f"[STARTUP] Services initialized in {elapsed:.2f}s", flush=True)
+    
+    # Get initial memory
+    memory = get_memory_usage()
+    print(f"[STARTUP] Memory usage: {memory['process_memory_mb']} MB", flush=True)
+    
+except Exception as e:
+    print(f"[ERROR] Failed to initialize services: {e}", flush=True)
+    import traceback
+    traceback.print_exc()
+    raise
 
-from io import BytesIO
-from urllib.parse import parse_qs
-import json
 
-# Import your services and handlers
-from services.embedding_service import EmbeddingService
-from services.transcription_service import TranscriptionService
-from handlers.embedding_handler import EmbeddingHandler
-from handlers.transcription_handler import TranscriptionHandler
-from utils.memory_tracker import get_memory_usage
-from utils.multipart_parser import parse_multipart_form_data
-
-# Initialize services globally (loaded once when app starts)
-print("Initializing services...")
-embedding_service = EmbeddingService()
-embedding_service.initialize()
-
-transcription_service = TranscriptionService()
-if transcription_service.is_available():
-    transcription_service.load_model()
-
-# Initialize handlers
-embedding_handler = EmbeddingHandler(embedding_service, get_memory_usage)
-transcription_handler = TranscriptionHandler(
-    transcription_service,
-    parse_multipart_form_data,
-    get_memory_usage
-)
-print("Services initialized successfully!")
-
-
-class WSGIRequest:
-    """Mock request object that mimics BaseHTTPRequestHandler interface"""
+class WSGIRequestHandler:
+    """Adapter to convert WSGI environ to our handler format"""
+    
     def __init__(self, environ):
         self.environ = environ
-        self.headers = {}
         self.path = environ.get('PATH_INFO', '/')
-        self.response_status = None
-        self.response_headers = []
-        self.response_body = BytesIO()
+        self.command = environ.get('REQUEST_METHOD', 'GET')
         
-        # Extract headers
+        # Create a file-like object for reading the request body
+        try:
+            content_length = int(environ.get('CONTENT_LENGTH', 0))
+        except ValueError:
+            content_length = 0
+        
+        self.rfile = environ['wsgi.input']
+        self.content_length = content_length
+        
+        # Headers dict
+        self.headers = {}
         for key, value in environ.items():
             if key.startswith('HTTP_'):
                 header_name = key[5:].replace('_', '-').title()
                 self.headers[header_name] = value
-            elif key == 'CONTENT_TYPE':
-                self.headers['Content-Type'] = value
-            elif key == 'CONTENT_LENGTH':
-                self.headers['Content-Length'] = value
+            elif key in ('CONTENT_TYPE', 'CONTENT_LENGTH'):
+                header_name = key.replace('_', '-').title()
+                self.headers[header_name] = value
         
-        # Setup input stream
-        self.rfile = environ['wsgi.input']
+        # Response data
+        self.response_status = '200 OK'
+        self.response_headers = []
+        self.response_body = BytesIO()
     
     def send_response(self, code):
-        self.response_status = code
+        """Set response status code"""
+        status_messages = {
+            200: 'OK',
+            400: 'Bad Request',
+            404: 'Not Found',
+            500: 'Internal Server Error',
+            503: 'Service Unavailable'
+        }
+        message = status_messages.get(code, 'Unknown')
+        self.response_status = f'{code} {message}'
     
     def send_header(self, key, value):
-        self.response_headers.append((key, value))
+        """Add a response header"""
+        self.response_headers.append((key, str(value)))
     
     def end_headers(self):
+        """Finalize headers (no-op for WSGI)"""
         pass
     
     def send_error(self, code, message):
-        self.response_status = code
-        self.response_headers = [('Content-Type', 'application/json')]
-        error_response = json.dumps({'error': message})
-        self.response_body.write(error_response.encode('utf-8'))
+        """Send an error response"""
+        self.send_response(code)
+        self.send_header('Content-Type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(f'Error {code}: {message}'.encode('utf-8'))
     
     @property
     def wfile(self):
+        """File-like object for writing response"""
         return self.response_body
 
 
 def application(environ, start_response):
-    """
-    WSGI application entry point
-    This is what Passenger calls to handle each request
-    """
-    request = WSGIRequest(environ)
+    """WSGI application entry point"""
+    request_start = time.time()
+    path = environ.get('PATH_INFO', '/')
     method = environ.get('REQUEST_METHOD', 'GET')
     
+    print(f"[REQUEST] {method} {path}", flush=True)
+    
     try:
-        # Route requests based on method and path
-        if method == 'POST':
-            if request.path == '/embed':
-                embedding_handler.handle_embed_batch(request)
-            elif request.path == '/embed_single':
-                embedding_handler.handle_embed_single(request)
-            elif request.path == '/transcribe':
-                transcription_handler.handle_transcribe(request)
-            else:
-                request.send_error(404, "Endpoint not found")
+        # Create our request handler wrapper
+        handler = WSGIRequestHandler(environ)
         
-        elif method == 'GET':
-            if request.path == '/' or request.path == '/health':
-                handle_health(request)
-            else:
-                request.send_error(404, "Endpoint not found")
+        # Route the request
+        if method == 'GET' and path == '/health':
+            # Health check
+            try:
+                memory_stats = get_memory_usage()
+                
+                import json
+                response_data = {
+                    'status': 'healthy',
+                    'service': 'transcription',
+                    'transcription_available': transcription_service.is_available(),
+                    'memory': {
+                        'process_memory_mb': memory_stats['process_memory_mb'],
+                        'system_memory_percent': memory_stats['system_memory_percent']
+                    }
+                }
+                
+                handler.send_response(200)
+                handler.send_header('Content-Type', 'application/json')
+                handler.end_headers()
+                handler.wfile.write(json.dumps(response_data).encode('utf-8'))
+                
+            except Exception as e:
+                print(f"[ERROR] Health check failed: {e}", flush=True)
+                handler.send_error(500, str(e))
+            
+        elif method == 'POST' and path == '/transcribe':
+            print("[REQUEST] Processing /transcribe request...", flush=True)
+            transcription_handler.handle_transcribe(handler)
+            
         else:
-            request.send_error(405, "Method not allowed")
+            handler.send_error(404, f"Endpoint not found: {method} {path}")
         
-        # Prepare response
-        status_code = request.response_status or 200
-        status_text = {
-            200: 'OK',
-            400: 'Bad Request',
-            404: 'Not Found',
-            405: 'Method Not Allowed',
-            500: 'Internal Server Error',
-            503: 'Service Unavailable'
-        }.get(status_code, 'Unknown')
+        # Get response
+        status = handler.response_status
+        headers = handler.response_headers
+        body = handler.response_body.getvalue()
         
-        status = f'{status_code} {status_text}'
-        headers = request.response_headers or [('Content-Type', 'application/json')]
+        # Log request completion
+        elapsed = time.time() - request_start
+        print(f"[REQUEST] Completed {method} {path} in {elapsed:.2f}s", flush=True)
         
+        # Send WSGI response
         start_response(status, headers)
-        return [request.response_body.getvalue()]
+        return [body]
     
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"[ERROR] Request failed: {e}", flush=True)
         import traceback
         traceback.print_exc()
-        status = '500 Internal Server Error'
-        headers = [('Content-Type', 'application/json')]
-        start_response(status, headers)
-        error_response = json.dumps({'error': str(e)})
-        return [error_response.encode('utf-8')]
-
-
-def handle_health(request):
-    """Handle GET /health - health check endpoint"""
-    try:
-        model_info = embedding_service.get_model_info()
-        memory_stats = get_memory_usage()
         
-        request.send_response(200)
-        request.send_header('Content-Type', 'application/json')
-        request.end_headers()
-        
-        response = {
-            'status': 'healthy',
-            'model': model_info['model'],
-            'dimensions': model_info['dimensions'],
-            'transcription_available': transcription_service.is_available(),
-            'memory': {
-                'process_memory_mb': memory_stats['process_memory_mb'],
-                'system_memory_percent': memory_stats['system_memory_percent']
-            }
-        }
-        
-        request.wfile.write(json.dumps(response).encode('utf-8'))
-        print("Health check passed")
-        
-    except Exception as e:
-        print(f"Health check error: {str(e)}")
-        request.send_error(500, f"Error: {str(e)}")
+        # Return error response
+        start_response('500 Internal Server Error', [('Content-Type', 'text/plain')])
+        return [f'Internal Server Error: {str(e)}'.encode('utf-8')]
