@@ -1,0 +1,15 @@
+[Unit]
+Description=Local Embedding Service
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/embedding_service
+Environment="PATH=/var/www/embeddings_env/bin"
+ExecStart=/var/www/embeddings_env/bin/python3 /var/www/embedding_service/embedding_server.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
