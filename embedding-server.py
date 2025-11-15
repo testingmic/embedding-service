@@ -11,24 +11,38 @@ import tempfile
 import os
 import re
 
-# Try to import Transcriber, fallback to openai-whisper if not available
+# Try to import transcription libraries in order of preference
 TRANSCRIBER_AVAILABLE = False
-WHISPER_AVAILABLE = False
-transcribe_func = None
+WHISPER_MODEL = None
+whisper_type = None
 
+# Try faster-whisper first (best compatibility with Python 3.14)
 try:
-    from Transcriber.transcriber import transcribe
-    transcribe_func = transcribe
+    from faster_whisper import WhisperModel
+    WHISPER_MODEL = "faster_whisper"
     TRANSCRIBER_AVAILABLE = True
-    print("✅ Transcriber package available")
+    print("✅ Using faster-whisper for transcription")
 except ImportError:
+    # Try Transcriber package
     try:
-        import whisper
-        WHISPER_AVAILABLE = True
-        TRANSCRIBER_AVAILABLE = True  # Mark as available since we have whisper
-        print("✅ Using openai-whisper for transcription (Transcriber package not available)")
+        from Transcriber.transcriber import transcribe as transcriber_transcribe
+        WHISPER_MODEL = "transcriber"
+        TRANSCRIBER_AVAILABLE = True
+        print("✅ Using Transcriber package for transcription")
     except ImportError:
-        print("⚠️  Warning: Neither Transcriber nor openai-whisper available. /transcribe endpoint will not work.")
+        # Try openai-whisper as last resort
+        try:
+            import whisper
+            WHISPER_MODEL = "openai_whisper"
+            TRANSCRIBER_AVAILABLE = True
+            print("✅ Using openai-whisper for transcription")
+        except ImportError:
+            print("⚠️  Warning: No transcription library available. /transcribe endpoint will not work.")
+            print("   Note: Python 3.14 has compatibility issues with transcription libraries.")
+            print("   Options:")
+            print("   1. Use Python 3.11 or 3.12: python3.11 -m venv venv311")
+            print("   2. Try: pip install faster-whisper (may still fail due to onnxruntime)")
+            print("   3. Use an API-based transcription service")
 
 class EmbeddingHandler(BaseHTTPRequestHandler):
     model = None
@@ -44,7 +58,12 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
     
     @classmethod
     def initialize_whisper(cls):
-        if WHISPER_AVAILABLE and not transcribe_func and cls.whisper_model is None:
+        if WHISPER_MODEL == "faster_whisper" and cls.whisper_model is None:
+            print("🔄 Loading faster-whisper model (this may take a minute on first run)...")
+            from faster_whisper import WhisperModel
+            cls.whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
+            print("✅ faster-whisper model loaded successfully!")
+        elif WHISPER_MODEL == "openai_whisper" and cls.whisper_model is None:
             print("🔄 Loading Whisper model (this may take a minute on first run)...")
             import whisper
             cls.whisper_model = whisper.load_model("base")
@@ -179,7 +198,7 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
         
         elif self.path == '/transcribe':
             if not TRANSCRIBER_AVAILABLE:
-                self.send_error(503, "Transcriber service not available. Please install Transcriber or openai-whisper package.")
+                self.send_error(503, "Transcriber service not available. Please install faster-whisper: pip install faster-whisper")
                 return
             
             try:
@@ -226,16 +245,23 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
                     # Transcribe the audio file
                     print(f"🎤 Transcribing audio file: {filename}")
                     
-                    if WHISPER_AVAILABLE and not transcribe_func:
-                        # Use openai-whisper directly
+                    if WHISPER_MODEL == "faster_whisper":
+                        # Use faster-whisper
+                        if self.whisper_model is None:
+                            self.initialize_whisper()
+                        segments, info = self.whisper_model.transcribe(tmp_file_path, language="en")
+                        transcription_text = " ".join([segment.text for segment in segments]).strip()
+                    elif WHISPER_MODEL == "openai_whisper":
+                        # Use openai-whisper
                         if self.whisper_model is None:
                             self.initialize_whisper()
                         result = self.whisper_model.transcribe(tmp_file_path, language="en")
                         transcription_text = result["text"].strip()
-                    else:
+                    elif WHISPER_MODEL == "transcriber":
                         # Use Transcriber package
+                        from Transcriber.transcriber import transcribe as transcriber_transcribe
                         with tempfile.TemporaryDirectory() as output_dir:
-                            transcribe_func(
+                            transcriber_transcribe(
                                 urls_or_paths=[tmp_file_path],
                                 output_dir=output_dir,
                                 output_formats=["txt"],
@@ -243,7 +269,6 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
                             )
                             
                             # Read the transcription result
-                            # The output file will be named based on the input file
                             base_name = os.path.splitext(os.path.basename(tmp_file_path))[0]
                             output_file = os.path.join(output_dir, f"{base_name}.txt")
                             
@@ -258,6 +283,8 @@ class EmbeddingHandler(BaseHTTPRequestHandler):
                                         transcription_text = f.read()
                                 else:
                                     raise Exception("Transcription output file not found")
+                    else:
+                        raise Exception("No transcription model available")
                     
                     # Send response
                     self.send_response(200)
@@ -307,7 +334,7 @@ def run_server(port=9876):
     
     # Initialize models before starting server
     EmbeddingHandler.initialize_model()
-    if WHISPER_AVAILABLE and not transcribe_func:
+    if WHISPER_MODEL in ["faster_whisper", "openai_whisper"]:
         EmbeddingHandler.initialize_whisper()
     
     server_address = ('', port)
