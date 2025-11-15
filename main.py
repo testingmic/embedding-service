@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/syywrhsb/virtualenv/public/transcriber/3.11/bin/python
 """
 Local Embedding Service - Main Entry Point
 HTTP server that provides text embeddings and audio transcription
