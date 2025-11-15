@@ -1,70 +1,86 @@
 """
-Transcription service for audio transcription
+Transcription service for audio transcription with LAZY loading
+Model is only loaded when first transcription is requested
 """
 import tempfile
 import os
-from typing import Optional, Tuple
+from typing import Optional
 
 
 class TranscriptionService:
-    """Service for transcribing audio files"""
+    """Service for transcribing audio files with lazy loading"""
     
-    def __init__(self):
-        """Initialize the transcription service"""
+    def __init__(self, model_size: str = "tiny"):
+        """
+        Initialize the transcription service.
+        
+        Args:
+            model_size: Whisper model size - 'tiny', 'base', 'small', 'medium', 'large'
+                       tiny: ~40MB, fastest, lowest memory (~150MB total)
+                       base: ~75MB, good balance (~250MB total)
+                       small: ~244MB, better accuracy (~400MB total)
+        """
         self.whisper_model = None
+        self.model_size = model_size
         self.model_type: Optional[str] = None
-        self._initialize_model()
+        self._check_available_libraries()
     
-    def _initialize_model(self) -> None:
-        """Try to initialize available transcription models"""
-        # Try faster-whisper first (best compatibility)
+    # Keep backward compatibility for old code
+    @classmethod
+    def create_default(cls):
+        """Create service with default settings (for backward compatibility)"""
+        return cls(model_size="tiny")
+    
+    def _check_available_libraries(self) -> None:
+        """Check which transcription libraries are available (without loading them)"""
+        # Try faster-whisper first (best compatibility and lowest memory)
         try:
-            from faster_whisper import WhisperModel
+            import faster_whisper
             self.model_type = "faster_whisper"
-            print("[OK] Using faster-whisper for transcription")
+            print(f"[OK] faster-whisper available (will use '{self.model_size}' model)")
             return
         except ImportError:
             pass
         
-        # Try Transcriber package
-        try:
-            from Transcriber.transcriber import transcribe as transcriber_transcribe
-            self.transcriber_transcribe = transcriber_transcribe
-            self.model_type = "transcriber"
-            print("[OK] Using Transcriber package for transcription")
-            return
-        except ImportError:
-            pass
-        
-        # Try openai-whisper as last resort
+        # Try openai-whisper as fallback
         try:
             import whisper
-            self.whisper_module = whisper
             self.model_type = "openai_whisper"
-            print("[OK] Using openai-whisper for transcription")
+            print(f"[WARNING] Using openai-whisper (heavier). Consider: pip install faster-whisper")
             return
         except ImportError:
             pass
         
         self.model_type = None
         print("[WARNING] No transcription library available.")
-        print("   Note: Python 3.14 has compatibility issues with transcription libraries.")
-        print("   Options:")
-        print("   1. Use Python 3.11 or 3.12: python3.11 -m venv venv311")
-        print("   2. Try: pip install faster-whisper (may still fail due to onnxruntime)")
-        print("   3. Use an API-based transcription service")
+        print("   Install with: pip install faster-whisper")
     
     def load_model(self) -> None:
-        """Load the transcription model (lazy initialization)"""
-        if self.model_type == "faster_whisper" and self.whisper_model is None:
-            print("[INIT] Loading faster-whisper model (this may take a minute on first run)...")
+        """
+        Load the transcription model (lazy loading - only called when needed)
+        """
+        if self.whisper_model is not None:
+            return  # Already loaded
+            
+        if self.model_type == "faster_whisper":
+            print(f"[INIT] Loading faster-whisper '{self.model_size}' model (first transcription)...")
             from faster_whisper import WhisperModel
-            self.whisper_model = WhisperModel("base", device="cpu", compute_type="int8")
-            print("[OK] faster-whisper model loaded successfully!")
-        elif self.model_type == "openai_whisper" and self.whisper_model is None:
-            print("[INIT] Loading Whisper model (this may take a minute on first run)...")
-            self.whisper_model = self.whisper_module.load_model("base")
-            print("[OK] Whisper model loaded successfully!")
+            
+            # Use int8 quantization for lower memory usage
+            self.whisper_model = WhisperModel(
+                self.model_size, 
+                device="cpu", 
+                compute_type="int8",
+                download_root=None,  # Use default cache
+                num_workers=1  # Minimize memory
+            )
+            print(f"[OK] Model loaded successfully!")
+            
+        elif self.model_type == "openai_whisper":
+            print(f"[INIT] Loading openai-whisper '{self.model_size}' model...")
+            import whisper
+            self.whisper_model = whisper.load_model(self.model_size)
+            print("[OK] Model loaded successfully!")
     
     def transcribe(self, audio_file_path: str, language: str = "en") -> str:
         """
@@ -81,44 +97,24 @@ class TranscriptionService:
             Exception: If no transcription model is available or transcription fails
         """
         if self.model_type is None:
-            raise Exception("No transcription model available. Please install a transcription library.")
+            raise Exception("No transcription model available. Please install faster-whisper")
+        
+        # Lazy load the model on first use
+        if self.whisper_model is None:
+            self.load_model()
         
         if self.model_type == "faster_whisper":
-            if self.whisper_model is None:
-                self.load_model()
-            segments, info = self.whisper_model.transcribe(audio_file_path, language=language)
+            segments, info = self.whisper_model.transcribe(
+                audio_file_path, 
+                language=language,
+                beam_size=1,  # Lower beam size = less memory
+                vad_filter=True,  # Filter silence
+            )
             return " ".join([segment.text for segment in segments]).strip()
         
         elif self.model_type == "openai_whisper":
-            if self.whisper_model is None:
-                self.load_model()
             result = self.whisper_model.transcribe(audio_file_path, language=language)
             return result["text"].strip()
-        
-        elif self.model_type == "transcriber":
-            with tempfile.TemporaryDirectory() as output_dir:
-                self.transcriber_transcribe(
-                    urls_or_paths=[audio_file_path],
-                    output_dir=output_dir,
-                    output_formats=["txt"],
-                    language=language
-                )
-                
-                # Read the transcription result
-                base_name = os.path.splitext(os.path.basename(audio_file_path))[0]
-                output_file = os.path.join(output_dir, f"{base_name}.txt")
-                
-                if os.path.exists(output_file):
-                    with open(output_file, 'r', encoding='utf-8') as f:
-                        return f.read()
-                else:
-                    # Try to find any .txt file in the output directory
-                    txt_files = [f for f in os.listdir(output_dir) if f.endswith('.txt')]
-                    if txt_files:
-                        with open(os.path.join(output_dir, txt_files[0]), 'r', encoding='utf-8') as f:
-                            return f.read()
-                    else:
-                        raise Exception("Transcription output file not found")
         
         else:
             raise Exception("No transcription model available")
@@ -126,3 +122,13 @@ class TranscriptionService:
     def is_available(self) -> bool:
         """Check if transcription service is available"""
         return self.model_type is not None
+    
+    def unload_model(self) -> None:
+        """Unload the model to free memory (optional optimization)"""
+        if self.whisper_model is not None:
+            print("[INFO] Unloading transcription model to free memory...")
+            self.whisper_model = None
+            
+            # Force garbage collection
+            import gc
+            gc.collect()

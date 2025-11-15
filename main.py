@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Local Transcription Service - Main Entry Point
-HTTP server that provides audio transcription only
+Local Transcription Service - Minimal Memory Version
+Model loads ONLY when first transcription is requested
 """
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import json
@@ -50,6 +50,7 @@ class APIHandler(BaseHTTPRequestHandler):
             response = {
                 'status': 'healthy',
                 'service': 'transcription',
+                'model_loaded': self.transcription_handler.transcription_service.whisper_model is not None,
                 'transcription_available': self.transcription_handler.transcription_service.is_available(),
                 'memory': {
                     'process_memory_mb': memory_stats['process_memory_mb'],
@@ -77,18 +78,22 @@ def create_handler(transcription_handler):
 def run_server(port=9876):
     """Start the HTTP server"""
     print("=" * 60)
-    print("Local Transcription Service")
+    print("Local Transcription Service (Minimal Memory)")
     print("=" * 60)
     
-    # Initialize services
+    # Initialize services WITHOUT loading the model
     print("\n[INIT] Initializing transcription service...")
-    transcription_service = TranscriptionService()
-    if transcription_service.is_available():
-        transcription_service.load_model()
-    else:
+    print("[INFO] Using 'tiny' model with lazy loading (loads on first request)")
+    
+    # Use 'tiny' model for lowest memory (change to 'base' for better quality)
+    transcription_service = TranscriptionService(model_size="tiny")
+    
+    if not transcription_service.is_available():
         print("[ERROR] Transcription service not available!")
         print("[ERROR] Please install: pip install faster-whisper")
         return
+    
+    # DO NOT pre-load the model here! Let it load on demand
     
     # Initialize handlers
     transcription_handler = TranscriptionHandler(
@@ -110,6 +115,8 @@ def run_server(port=9876):
     print(f"   GET  /health        - Health check")
     print(f"   POST /transcribe    - Transcribe audio file (multipart/form-data, field: 'audio')")
     print(f"\n[MEMORY] Initial memory usage: {initial_memory['process_memory_mb']} MB")
+    print(f"[INFO] Using 'tiny' Whisper model for minimal memory")
+    print(f"[INFO] First transcription will take longer (model loading)")
     print(f"[INFO] Press Ctrl+C to stop the server")
     print("=" * 60)
     print()

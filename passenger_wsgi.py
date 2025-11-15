@@ -32,9 +32,12 @@ try:
     
     # Initialize transcription service only
     print("[STARTUP] Initializing transcription service...", flush=True)
-    transcription_service = TranscriptionService()
-    if transcription_service.is_available():
-        transcription_service.load_model()
+    print("[INFO] Using 'tiny' model with lazy loading (loads on first request)...", flush=True)
+    transcription_service = TranscriptionService(model_size="tiny")
+    
+    # DO NOT pre-load the model - let it load on first request
+    # if transcription_service.is_available():
+    #     transcription_service.load_model()  # <-- REMOVED
     
     # Initialize handler
     transcription_handler = TranscriptionHandler(
