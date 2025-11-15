@@ -1,135 +1,121 @@
 #!/usr/bin/env python3
 """
-Local Transcription Service - Minimal Memory Version
-Model loads ONLY when first transcription is requested
+Memory diagnostic script to identify what's consuming memory
 """
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import json
+import sys
+import os
 
-from services.transcription_service import TranscriptionService
-from handlers.transcription_handler import TranscriptionHandler
-from utils.memory_tracker import get_memory_usage
-from utils.multipart_parser import parse_multipart_form_data
-
-
-class APIHandler(BaseHTTPRequestHandler):
-    """Main HTTP request handler that routes requests to appropriate handlers"""
-    
-    def __init__(self, *args, transcription_handler, **kwargs):
-        """Initialize the handler with service instances"""
-        self.transcription_handler = transcription_handler
-        super().__init__(*args, **kwargs)
-    
-    def log_message(self, format, *args):
-        """Suppress default logs, only show our messages"""
-        pass
-    
-    def do_POST(self):
-        """Handle POST requests"""
-        if self.path == '/transcribe':
-            self.transcription_handler.handle_transcribe(self)
-        else:
-            self.send_error(404, "Endpoint not found")
-    
-    def do_GET(self):
-        """Handle GET requests"""
-        if self.path == '/health':
-            self._handle_health()
-        else:
-            self.send_error(404, "Endpoint not found")
-    
-    def _handle_health(self):
-        """Handle GET /health - health check endpoint"""
-        try:
-            memory_stats = get_memory_usage()
-            
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.end_headers()
-            
-            response = {
-                'status': 'healthy',
-                'service': 'transcription',
-                'model_loaded': self.transcription_handler.transcription_service.whisper_model is not None,
-                'transcription_available': self.transcription_handler.transcription_service.is_available(),
-                'memory': {
-                    'process_memory_mb': memory_stats['process_memory_mb'],
-                    'system_memory_percent': memory_stats['system_memory_percent']
-                }
-            }
-            
-            self.wfile.write(json.dumps(response).encode('utf-8'))
-            print("[OK] Health check passed")
-            
-        except Exception as e:
-            print(f"[ERROR] Health check error: {str(e)}")
-            self.send_error(500, f"Error: {str(e)}")
-
-
-def create_handler(transcription_handler):
-    """Factory function to create handler with dependencies"""
-    def handler(*args, **kwargs):
-        return APIHandler(*args, 
-                         transcription_handler=transcription_handler,
-                         **kwargs)
-    return handler
-
-
-def run_server(port=9876):
-    """Start the HTTP server"""
-    print("=" * 60)
-    print("Local Transcription Service (Minimal Memory)")
-    print("=" * 60)
-    
-    # Initialize services WITHOUT loading the model
-    print("\n[INIT] Initializing transcription service...")
-    print("[INFO] Model will load on first transcription request (lazy loading)")
-    
-    # Use 'tiny' model for lowest memory (change to 'base' for better quality)
-    transcription_service = TranscriptionService(model_size="tiny")
-    
-    if not transcription_service.is_available():
-        print("[ERROR] Transcription service not available!")
-        print("[ERROR] Please install: pip install faster-whisper")
-        return
-    
-    # DO NOT pre-load the model here! Let it load on demand
-    # transcription_service.load_model()  # <-- REMOVED
-    
-    # Initialize handlers
-    transcription_handler = TranscriptionHandler(
-        transcription_service,
-        parse_multipart_form_data,
-        get_memory_usage
-    )
-    
-    # Create server with handler factory
-    handler_class = create_handler(transcription_handler)
-    server_address = ('', port)
-    httpd = HTTPServer(server_address, handler_class)
-    
-    # Get initial memory stats
-    initial_memory = get_memory_usage()
-    
-    print(f"\n[OK] Server running on http://localhost:{port}")
-    print(f"\n[INFO] Available endpoints:")
-    print(f"   GET  /health        - Health check")
-    print(f"   POST /transcribe    - Transcribe audio file (multipart/form-data, field: 'audio')")
-    print(f"\n[MEMORY] Initial memory usage: {initial_memory['process_memory_mb']} MB")
-    print(f"[INFO] Using 'tiny' Whisper model for minimal memory")
-    print(f"[INFO] First transcription will take longer (model loading)")
-    print(f"[INFO] Press Ctrl+C to stop the server")
-    print("=" * 60)
-    print()
-    
+def get_memory():
+    """Get current memory usage"""
     try:
-        httpd.serve_forever()
-    except KeyboardInterrupt:
-        print("\n\n[SHUTDOWN] Shutting down server...")
-        final_memory = get_memory_usage()
-        print(f"[MEMORY] Final memory usage: {final_memory['process_memory_mb']} MB")
-        httpd.shutdown()
+        import psutil
+        process = psutil.Process(os.getpid())
+        return process.memory_info().rss / (1024 * 1024)
+    except:
+        return 0
 
+print("=" * 60)
+print("MEMORY DIAGNOSTIC")
+print("=" * 60)
 
-if __name__ == '__main__':
-    run_server()
+# Baseline
+baseline = get_memory()
+print(f"\n1. Baseline (Python only): {baseline:.2f} MB")
+
+# After importing common libraries
+import json
+import tempfile
+step2 = get_memory()
+print(f"2. After stdlib imports: {step2:.2f} MB (delta: +{step2-baseline:.2f} MB)")
+
+# Check if sentence-transformers is still installed
+try:
+    import sentence_transformers
+    st_mem = get_memory()
+    print(f"3. WARNING: sentence-transformers imported: {st_mem:.2f} MB (delta: +{st_mem-step2:.2f} MB)")
+    print("   -> This should NOT be installed! Run: pip uninstall sentence-transformers -y")
+except ImportError:
+    print(f"3. sentence-transformers: NOT installed (good!)")
+
+# Check if torch is still installed
+try:
+    import torch
+    torch_mem = get_memory()
+    print(f"4. WARNING: PyTorch imported: {torch_mem:.2f} MB (delta: +{torch_mem-step2:.2f} MB)")
+    print("   -> This is heavy! Run: pip uninstall torch torchvision torchaudio -y")
+except ImportError:
+    print(f"4. PyTorch: NOT installed (good!)")
+
+# Check psutil
+try:
+    import psutil
+    ps_mem = get_memory()
+    print(f"5. psutil imported: {ps_mem:.2f} MB (delta: +{ps_mem-step2:.2f} MB)")
+except ImportError:
+    print(f"5. psutil: NOT installed")
+
+# Check faster-whisper
+try:
+    from faster_whisper import WhisperModel
+    fw_mem = get_memory()
+    print(f"6. faster-whisper imported: {fw_mem:.2f} MB (delta: +{fw_mem-step2:.2f} MB)")
+except ImportError:
+    print(f"6. faster-whisper: NOT installed")
+    print("   -> Run: pip install faster-whisper")
+
+# Check openai-whisper
+try:
+    import whisper
+    ow_mem = get_memory()
+    print(f"7. WARNING: openai-whisper imported: {ow_mem:.2f} MB (delta: +{ow_mem-step2:.2f} MB)")
+    print("   -> This is heavy! Consider using faster-whisper instead")
+except ImportError:
+    print(f"7. openai-whisper: NOT installed (good if using faster-whisper)")
+
+# Load the actual model
+try:
+    print(f"\n8. Loading Whisper model...")
+    from faster_whisper import WhisperModel
+    before_model = get_memory()
+    model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    after_model = get_memory()
+    print(f"   Model loaded: {after_model:.2f} MB (delta: +{after_model-before_model:.2f} MB)")
+    print(f"   Note: 'tiny' model is smallest. 'base' is larger.")
+except Exception as e:
+    print(f"   Could not load model: {e}")
+
+print("\n" + "=" * 60)
+print("INSTALLED PACKAGES:")
+print("=" * 60)
+import subprocess
+result = subprocess.run([sys.executable, "-m", "pip", "list"], capture_output=True, text=True)
+relevant_packages = [line for line in result.stdout.split('\n') if any(x in line.lower() for x in ['torch', 'whisper', 'transform', 'onnx', 'sentencepiece'])]
+if relevant_packages:
+    for pkg in relevant_packages:
+        print(pkg)
+else:
+    print("No AI/ML packages found")
+
+print("\n" + "=" * 60)
+print("RECOMMENDATIONS:")
+print("=" * 60)
+
+current = get_memory()
+if current > 500:
+    print("Memory usage is HIGH (>500 MB). Possible causes:")
+    print("1. PyTorch is still installed (uninstall it)")
+    print("2. sentence-transformers is still installed (uninstall it)")
+    print("3. Using 'base' or larger Whisper model (use 'tiny' for testing)")
+    print("4. openai-whisper instead of faster-whisper (switch to faster-whisper)")
+elif current > 300:
+    print("Memory usage is MODERATE (300-500 MB):")
+    print("1. This might be 'base' Whisper model - consider 'tiny' for lower memory")
+    print("2. Check if any PyTorch dependencies remain")
+else:
+    print("Memory usage is GOOD (<300 MB)!")
+    print("This is expected for faster-whisper with tiny/base models")
+
+print("\nTo reduce memory further:")
+print("- Use 'tiny' model instead of 'base': WhisperModel('tiny', ...)")
+print("- Only load model when needed (lazy loading)")
+print("- Make sure torch/sentence-transformers are completely removed")
