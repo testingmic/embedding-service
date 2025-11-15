@@ -2,3 +2,4 @@
 embeddings_env*
 tmp/
 venv/
+__pycache__/*
