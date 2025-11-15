@@ -1,19 +1,17 @@
-# Embedding Service
+# Transcription Service
 
-A local HTTP service that provides text embeddings and audio transcription capabilities.
+A local HTTP service that provides audio transcription capabilities.
 
 ## Project Structure
 
 ```
-embedding-service/
+transcription-service/
 ├── main.py                 # Entry point - starts the HTTP server
 ├── handlers/               # Request handlers
 │   ├── __init__.py
-│   ├── embedding_handler.py    # Handles /embed and /embed_single endpoints
 │   └── transcription_handler.py # Handles /transcribe endpoint
 ├── services/               # Business logic services
 │   ├── __init__.py
-│   ├── embedding_service.py    # Embedding model management
 │   └── transcription_service.py # Transcription model management
 └── utils/                  # Utility functions
     ├── __init__.py
@@ -23,7 +21,6 @@ embedding-service/
 
 ## Features
 
-- **Text Embeddings**: Generate embeddings for single texts or batches
 - **Audio Transcription**: Transcribe audio files using Whisper models
 - **Memory Tracking**: All responses include memory usage statistics
 - **Clean Architecture**: Separated concerns with handlers, services, and utilities
@@ -38,10 +35,10 @@ source embeddings_env/bin/activate  # On Windows: embeddings_env\Scripts\activat
 
 2. Install dependencies:
 ```bash
-pip install sentence-transformers torch numpy psutil
+pip install -r requirements.txt
 
-# For transcription (optional):
-pip install openai-whisper  # or faster-whisper
+# Or manually:
+pip install psutil openai-whisper  # or faster-whisper
 ```
 
 ## Usage
@@ -62,59 +59,10 @@ Health check endpoint that returns server status and memory usage.
 ```json
 {
   "status": "healthy",
-  "model": "all-MiniLM-L6-v2",
-  "dimensions": 384,
   "transcription_available": true,
   "memory": {
     "process_memory_mb": 245.67,
     "system_memory_percent": 45.2
-  }
-}
-```
-
-### POST /embed_single
-Generate embedding for a single text.
-
-**Request:**
-```json
-{
-  "text": "Hello, world!"
-}
-```
-
-**Response:**
-```json
-{
-  "embedding": [0.123, -0.456, ...],
-  "dimensions": 384,
-  "memory": {
-    "process_memory_mb": 250.12,
-    "memory_delta_mb": 4.45,
-    "system_memory_percent": 45.5
-  }
-}
-```
-
-### POST /embed
-Generate embeddings for multiple texts.
-
-**Request:**
-```json
-{
-  "texts": ["Text 1", "Text 2", "Text 3"]
-}
-```
-
-**Response:**
-```json
-{
-  "embeddings": [[0.123, ...], [0.456, ...], [0.789, ...]],
-  "dimensions": 384,
-  "count": 3,
-  "memory": {
-    "process_memory_mb": 255.23,
-    "memory_delta_mb": 5.11,
-    "system_memory_percent": 45.8
   }
 }
 ```
