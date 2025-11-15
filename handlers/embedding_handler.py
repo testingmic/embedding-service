@@ -64,11 +64,11 @@ class EmbeddingHandler:
             }
             
             handler.wfile.write(json.dumps(response).encode('utf-8'))
-            print(f"✅ Successfully generated {len(embeddings_list)} embeddings")
-            print(f"📊 Memory: {memory_after['process_memory_mb']} MB (Δ {round(memory_delta, 2)} MB)")
+            print(f"[OK] Successfully generated {len(embeddings_list)} embeddings")
+            print(f"[MEMORY] {memory_after['process_memory_mb']} MB (delta: {round(memory_delta, 2)} MB)")
             
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"[ERROR] {str(e)}")
             handler.send_error(500, f"Error: {str(e)}")
     
     def handle_embed_single(self, handler: BaseHTTPRequestHandler) -> None:
@@ -109,10 +109,9 @@ class EmbeddingHandler:
             }
             
             handler.wfile.write(json.dumps(response).encode('utf-8'))
-            print(f"✅ Successfully generated embedding")
-            print(f"📊 Memory: {memory_after['process_memory_mb']} MB (Δ {round(memory_delta, 2)} MB)")
+            print(f"[OK] Successfully generated embedding")
+            print(f"[MEMORY] {memory_after['process_memory_mb']} MB (delta: {round(memory_delta, 2)} MB)")
             
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"[ERROR] {str(e)}")
             handler.send_error(500, f"Error: {str(e)}")
-

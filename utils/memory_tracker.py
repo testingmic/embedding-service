@@ -9,7 +9,7 @@ try:
     PSUTIL_AVAILABLE = True
 except ImportError:
     PSUTIL_AVAILABLE = False
-    print("⚠️  Warning: psutil not installed. Memory tracking will be limited.")
+    print("[WARNING] psutil not installed. Memory tracking will be limited.")
     print("   Install with: pip install psutil")
 
 
@@ -73,7 +73,6 @@ def log_memory_usage(operation: str, memory_stats: Dict[str, float]) -> None:
         operation: Name of the operation
         memory_stats: Memory statistics dictionary
     """
-    print(f"📊 Memory usage for {operation}:")
+    print(f"[MEMORY] Memory usage for {operation}:")
     print(f"   Process: {memory_stats['process_memory_mb']} MB")
     print(f"   System: {memory_stats['system_memory_used_mb']} MB / {memory_stats['system_memory_total_mb']} MB ({memory_stats['system_memory_percent']}%)")
-

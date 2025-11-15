@@ -67,10 +67,10 @@ class APIHandler(BaseHTTPRequestHandler):
             }
             
             self.wfile.write(json.dumps(response).encode('utf-8'))
-            print("💚 Health check passed")
+            print("[OK] Health check passed")
             
         except Exception as e:
-            print(f"❌ Health check error: {str(e)}")
+            print(f"[ERROR] Health check error: {str(e)}")
             self.send_error(500, f"Error: {str(e)}")
 
 
@@ -87,11 +87,11 @@ def create_handler(embedding_handler, transcription_handler):
 def run_server(port=9876):
     """Start the HTTP server"""
     print("=" * 60)
-    print("🚀 Local Embedding Service")
+    print("Local Embedding Service")
     print("=" * 60)
     
     # Initialize services
-    print("\n🔄 Initializing services...")
+    print("\n[INIT] Initializing services...")
     embedding_service = EmbeddingService()
     embedding_service.initialize()
     
@@ -115,26 +115,25 @@ def run_server(port=9876):
     # Get initial memory stats
     initial_memory = get_memory_usage()
     
-    print(f"\n✅ Server running on http://localhost:{port}")
-    print(f"\n📚 Available endpoints:")
+    print(f"\n[OK] Server running on http://localhost:{port}")
+    print(f"\n[INFO] Available endpoints:")
     print(f"   GET  /health        - Health check")
     print(f"   POST /embed_single  - Generate single embedding")
     print(f"   POST /embed         - Generate batch embeddings")
     print(f"   POST /transcribe    - Transcribe audio file (multipart/form-data, field: 'audio')")
-    print(f"\n💾 Initial memory usage: {initial_memory['process_memory_mb']} MB")
-    print(f"💡 Press Ctrl+C to stop the server")
+    print(f"\n[MEMORY] Initial memory usage: {initial_memory['process_memory_mb']} MB")
+    print(f"[INFO] Press Ctrl+C to stop the server")
     print("=" * 60)
     print()
     
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n\n👋 Shutting down server...")
+        print("\n\n[SHUTDOWN] Shutting down server...")
         final_memory = get_memory_usage()
-        print(f"💾 Final memory usage: {final_memory['process_memory_mb']} MB")
+        print(f"[MEMORY] Final memory usage: {final_memory['process_memory_mb']} MB")
         httpd.shutdown()
 
 
 if __name__ == '__main__':
     run_server()
-

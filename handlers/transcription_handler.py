@@ -81,7 +81,7 @@ class TranscriptionHandler:
                 memory_before = self.get_memory_usage()
                 
                 # Transcribe the audio file
-                print(f"🎤 Transcribing audio file: {filename}")
+                print(f"[TRANSCRIBE] Processing audio file: {filename}")
                 transcription_text = self.transcription_service.transcribe(tmp_file_path, language="en")
                 
                 # Track memory after processing
@@ -104,8 +104,8 @@ class TranscriptionHandler:
                 }
                 
                 handler.wfile.write(json.dumps(response).encode('utf-8'))
-                print(f"✅ Successfully transcribed audio file")
-                print(f"📊 Memory: {memory_after['process_memory_mb']} MB (Δ {round(memory_delta, 2)} MB)")
+                print(f"[OK] Successfully transcribed audio file")
+                print(f"[MEMORY] {memory_after['process_memory_mb']} MB (delta: {round(memory_delta, 2)} MB)")
                 
             finally:
                 # Clean up temporary file
@@ -113,6 +113,5 @@ class TranscriptionHandler:
                     os.unlink(tmp_file_path)
             
         except Exception as e:
-            print(f"❌ Error: {str(e)}")
+            print(f"[ERROR] {str(e)}")
             handler.send_error(500, f"Error: {str(e)}")
-
