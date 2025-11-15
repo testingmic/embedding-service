@@ -1,0 +1,9 @@
+sentence-transformers>=2.0.0
+torch>=2.0.0
+numpy>=1.24.0
+psutil>=5.9.0
+
+# Optional: For transcription (choose one based on Python version)
+# openai-whisper>=20240930  # For Python 3.11 or earlier
+# faster-whisper>=1.1.1      # Alternative, may have Python 3.14 issues
+
