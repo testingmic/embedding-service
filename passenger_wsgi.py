@@ -5,8 +5,16 @@ WSGI adapter for cPanel/Passenger deployment
 import sys
 import os
 
+# Increase timeouts
+os.environ['PASSENGER_STARTUP_TIMEOUT'] = '300'
+os.environ['PASSENGER_MAX_REQUEST_TIME'] = '300'
+
 # Get the directory of this script
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+INTERP = os.path.join(os.environ['HOME'], 'virtualenv', 'transcriber', '3.11', 'bin', 'python3')
+if sys.executable != INTERP:
+    os.execl(INTERP, INTERP, *sys.argv)
 
 # Add cPanel virtual environment to path
 VENV_SITE_PACKAGES = '/home/syywrhsb/virtualenv/public/transcriber/3.11/lib/python3.11/site-packages'

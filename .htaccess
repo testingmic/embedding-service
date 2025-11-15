@@ -3,6 +3,16 @@ PassengerAppRoot "/home/syywrhsb/public/transcriber"
 PassengerBaseURI "/"
 PassengerAppType wsgi
 PassengerStartupFile passenger_wsgi.py
+
+PassengerAppEnv production
+PassengerStartupTimeout 300
+PassengerRequestQueueOverflowStatusCode 503
+PassengerMaxRequestTime 300
+
+# Keep the process alive longer
+PassengerMinInstances 1
+PassengerMaxPoolSize 2
+
 PassengerPython "/home/syywrhsb/virtualenv/public/transcriber/3.11/bin/python"
 # DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
 # DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
